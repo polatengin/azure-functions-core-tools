@@ -48,10 +48,18 @@ if (-not (Test-Path $SourcePath))
 }
 
 WriteLog "Validating source path '$SourcePath'."
-$filesToUploaded = @(Get-ChildItem -Path "$SourcePath/*.zip" | ForEach-Object {$_.FullName})
-if ($filesToUploaded.Count -eq 0)
+$filesToUpload = @(Get-ChildItem -Path "$SourcePath/Azure.Functions.Cli.*" | ForEach-Object {$_.FullName})
+if ($filesToUpload.Count -eq 0)
 {
-    WriteLog -Message "'$SourcePath' does not contain any zip files to upload." -Throw
+    WriteLog -Message "'$SourcePath' does not contain any Azure.Functions.Cli.* files to upload." -Throw
+}
+
+# If the msi files are available, upload them as well
+$msiFiles = @(Get-ChildItem -Path "$SourcePath/func-cli*.msi" | ForEach-Object {$_.FullName})
+if ($msiFiles.Count -eq 0)
+{
+    WriteLog "Adding func-cli*.msi to the list of files to upload."
+    $filesToUpload += $msiFiles
 }
 
 if (-not (Get-command New-AzStorageContext -ea SilentlyContinue))
@@ -86,7 +94,7 @@ try
 {
     WriteLog -Message "Reading $manifestFileName."
     $manifest = Get-Content $manifestFilePath -Raw | ConvertFrom-Json -ErrorAction Stop
-    $filesToUploaded += $manifestFilePath
+    $filesToUpload += $manifestFilePath
 }
 catch
 {
@@ -98,7 +106,7 @@ WriteLog -Message "Creating version.txt file..."
 $version = $manifest.CoreToolsVersion
 $versionFilePath = Join-Path $SourcePath "version.txt"
 $version | Set-Content -Path $versionFilePath
-$filesToUploaded += $versionFilePath
+$filesToUpload += $versionFilePath
 
 # These are the destination paths in the storage account
 # "https://<storageAccountName>.blob.core.windows.net/builds/$FUNC_RUNTIME_VERSION/latest/Azure.Functions.Cli.$os-$arch.zip"
@@ -118,7 +126,7 @@ if ($filesToDelete.Count -gt 0)
 
 foreach ($path in @($latestDestinationPath, $versionDestinationPath))
 {
-    foreach ($file in $filesToUploaded)
+    foreach ($file in $filesToUpload)
     {
         $fileName = Split-Path $file -Leaf
         $destinationPath = Join-Path $path $fileName
